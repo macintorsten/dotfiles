@@ -15,7 +15,7 @@ echo "Installation options:"
 echo "  1. Configurations only (recommended if tools installed)"
 echo "  2. Full installation (tools + configurations)"
 echo ""
-read -p "Install configs only? [Y/n] " -n 1 -r
+read -p "Install tools? [Y/n] " -n 1 -r
 echo
 echo ""
 
@@ -27,8 +27,8 @@ if ! command -v stow &> /dev/null; then
     bash scripts/install-stow.sh
 fi
 
-# Install tools if requested
-if [[ $REPLY =~ ^[Nn]$ ]]; then
+# Install tools if requested (default: yes)
+if [[ ! $REPLY =~ ^[Nn]$ ]]; then
     echo "→ Installing tools..."
     for script in scripts/install-*.sh; do
         if [ -f "$script" ] && [ "$script" != "scripts/install-stow.sh" ]; then
@@ -43,8 +43,9 @@ fi
 # Install configurations using stow
 echo "→ Installing configurations..."
 cd dotfiles
+
 echo "  Packages: $(ls -d */ | tr -d '/')"
-stow */
+stow -t ~ */
 
 # Add single-line bashrc.d sourcing if not already present
 if ! grep -q ".bashrc.d" ~/.bashrc 2>/dev/null; then
