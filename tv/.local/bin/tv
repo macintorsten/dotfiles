@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+if ! command -v convert &>/dev/null; then
+  echo "error: imagemagick is required (apt install imagemagick)" >&2
+  exit 1
+fi
+
+if [ $# -eq 0 ]; then
+  echo "Usage: tv <image> [image...]" >&2
+  exit 1
+fi
+
+RENDER_PGID=""
+
+cleanup() {
+  [ -n "$RENDER_PGID" ] && kill -- -"$RENDER_PGID" 2>/dev/null
+  rm -f "$AWKSCRIPT"
+  echo -ne '\e[?25h\e[0m\e[?1049l'
+  exit 0
+}
+AWKSCRIPT=$(mktemp /tmp/tv_awk.XXXXXX)
+trap cleanup INT TERM EXIT
+cat > "$AWKSCRIPT" << 'EOF'
+/^#/ { printf "\033[H"; next }
+{
+  split($1, coords, ",")
+  x = int(coords[1]); y = int(coords[2])
+  split($0, parts, ": "); split(parts[2], colors, /[(),]/)
+  r = int(colors[2]); g = int(colors[3]); b = int(colors[4])
+  if (y % 2 == 0) { R[x]=r; G[x]=g; B[x]=b }
+  else {
+    printf "\033[48;2;%d;%d;%dm\033[38;2;%d;%d;%dm▄", R[x],G[x],B[x],r,g,b
+    if (x == cols - 1) printf "\033[0m\r\n"
+  }
+}
+EOF
+
+show_image() {
+  local img="$1"
+  local mime_type w h is_animated=0
+
+  mime_type=$(file -b --mime-type "$img")
+  if [[ "$mime_type" != image/* ]]; then
+    echo "error: '$img' is not an image ($mime_type)" >&2
+    return 1
+  fi
+
+  w=$(tput cols || echo 80)
+  h=$(tput lines || echo 24)
+  h=$((h - 1))
+
+  [[ "$mime_type" == "image/gif" || "$mime_type" == "image/webp" ]] && is_animated=1
+
+  echo -ne '\e[?25l\e[?1049h\e[2J\e[H'
+
+  if [ $is_animated -eq 1 ]; then
+    # setsid gives the pipeline its own process group so we can kill it cleanly
+    setsid bash -c \
+      'convert "$1" -coalesce -resize "$2x$(($3*2))!" txt:- | awk -v cols="$2" -f "$4"' \
+      -- "$img" "$w" "$h" "$AWKSCRIPT" &
+    local render_pid=$!
+    local pgid
+    pgid=$(ps -o pgid= -p $render_pid 2>/dev/null | tr -d ' ')
+    RENDER_PGID="$pgid"
+
+    while kill -0 $render_pid 2>/dev/null; do
+      if read -s -n 1 -t 0.1 2>/dev/null; then
+        [ -n "$pgid" ] && kill -- -"$pgid" 2>/dev/null
+        wait $render_pid 2>/dev/null
+        break
+      fi
+    done
+    RENDER_PGID=""
+  else
+    convert "$img" -coalesce -resize "${w}x$((h * 2))!" txt:- | awk -v cols="$w" -f "$AWKSCRIPT"
+    read -s -n 1
+  fi
+}
+
+for img in "$@"; do
+  if [ ! -f "$img" ]; then
+    echo "error: '$img' not found" >&2
+    continue
+  fi
+  show_image "$img"
+done
+
+cleanup
