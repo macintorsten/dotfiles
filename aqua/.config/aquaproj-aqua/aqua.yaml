@@ -5,9 +5,18 @@ registries:
 
 packages:
   - name: junegunn/fzf@v0.70.0
+    tags: [default]
   - name: sharkdp/bat@v0.26.1
+    tags: [default]
   - name: JanDeDobbeleer/oh-my-posh@v29.9.2
+    tags: [default]
   - name: tmux/tmux-builds@v3.6a
+    tags: [default]
   - name: BurntSushi/ripgrep@15.1.0
+    tags: [default]
   - name: ajeetdsouza/zoxide@v0.9.9
+    tags: [default]
   - name: dandavison/delta@0.19.1
+    tags: [default]
+  - name: Schniz/fnm@v1.39.0
+  - name: astral-sh/uv@0.11.1

@@ -11,10 +11,20 @@ cd ~/.dotfiles && stow */
 source ~/.bashrc
 ```
 
+## Tools
+
+Tools are defined in `aqua/.config/aquaproj-aqua/aqua.yaml`. Packages tagged `default` are installed by `bootstrap.sh`. Untagged packages are installed lazily on first use, or manually:
+
+```bash
+aqua install <owner/repo>   # install a specific package
+aqua install --all          # install everything
+```
+
 ## Update tools
 
 ```bash
-cd ~/.dotfiles/aqua/.config/aquaproj-aqua && aqua update
+aqua update           # bump versions in aqua.yaml
+aqua install --all    # download and install updated versions
 ```
 
 ## Test
