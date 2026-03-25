@@ -8,3 +8,6 @@ packages:
   - name: sharkdp/bat@v0.26.1
   - name: JanDeDobbeleer/oh-my-posh@v29.9.2
   - name: tmux/tmux-builds@v3.6a
+  - name: BurntSushi/ripgrep@15.1.0
+  - name: ajeetdsouza/zoxide@v0.9.9
+  - name: dandavison/delta@0.19.1
