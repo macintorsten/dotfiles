@@ -29,4 +29,4 @@ fi
 grep -qF "$BASHRC_LINE" "$HOME/.bashrc" 2>/dev/null || echo "$BASHRC_LINE" >> "$HOME/.bashrc"
 
 # install aqua tools (default tag only)
-AQUA_GLOBAL_CONFIG="$REPO/aqua/.config/aquaproj-aqua/aqua.yaml" "$AQUA_BIN" install --tags default
+AQUA_CONFIG="$REPO/aqua/.config/aquaproj-aqua/aqua.yaml" "$AQUA_BIN" install --tags default
