@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/aquaproj/aqua/main/json-schema/aqua-yaml.json
+registries:
+  - type: standard
+    ref: v4.487.0
+
+packages:
+  - name: junegunn/fzf@v0.70.0
+  - name: sharkdp/bat@v0.26.1
+  - name: JanDeDobbeleer/oh-my-posh@v29.9.2
+  - name: tmux/tmux-builds@v3.6a

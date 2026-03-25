@@ -1,0 +1,5 @@
+# stow debris (created if stow is run without -t ~ from repo root)
+/.bashrc.d
+/.config/
+/.tmux.conf
+/.vimrc
