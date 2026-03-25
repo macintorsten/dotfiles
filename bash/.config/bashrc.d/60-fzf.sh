@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 _fzf_cache="${XDG_CACHE_HOME:-$HOME/.cache}/fzf-init.bash"
 if [ ! -f "$_fzf_cache" ] && command -v fzf &>/dev/null; then
+    mkdir -p "${_fzf_cache%/*}"
     fzf --bash > "$_fzf_cache"
 fi
 [ -f "$_fzf_cache" ] && source "$_fzf_cache"
