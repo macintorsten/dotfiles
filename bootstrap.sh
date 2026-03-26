@@ -3,7 +3,7 @@ set -e
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
 AQUA_BIN="${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua/bin/aqua"
-BASHRC_LINE='[ -f "$HOME/.bashrc.d" ] && . "$HOME/.bashrc.d"'
+BASHRC_LINE='if [ -d "$HOME/.config/bashrc.d" ]; then for rc in "$HOME/.config/bashrc.d"/*.sh; do [ -f "$rc" ] && . "$rc"; done; unset rc; fi'
 
 # stow
 if ! command -v stow &>/dev/null; then
