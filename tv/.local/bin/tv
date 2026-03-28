@@ -5,8 +5,36 @@ if ! command -v convert &>/dev/null; then
   exit 1
 fi
 
+MODE="half"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -m|--mode)
+      shift
+      MODE="$1"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "error: unknown option '$1'" >&2
+      exit 1
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+case "$MODE" in
+  half|sextant|sextant-bayer|sextant-fs|braille) ;;
+  *) echo "error: unknown mode '$MODE'. Valid: half, sextant, sextant-bayer, sextant-fs, braille" >&2; exit 1 ;;
+esac
+
 if [ $# -eq 0 ]; then
-  echo "Usage: tv <image> [image...]" >&2
+  echo "Usage: tv [-m MODE | --mode MODE] <image> [image...]" >&2
+  echo "Modes: half (default), sextant, sextant-bayer, sextant-fs, braille" >&2
   exit 1
 fi
 
@@ -20,20 +48,461 @@ cleanup() {
 }
 AWKSCRIPT=$(mktemp /tmp/tv_awk.XXXXXX)
 trap cleanup INT TERM EXIT
-cat > "$AWKSCRIPT" << 'EOF'
+
+case "$MODE" in
+  half)
+    cat > "$AWKSCRIPT" << 'HALF_EOF'
 /^#/ { printf "\033[H"; next }
 {
   split($1, coords, ",")
   x = int(coords[1]); y = int(coords[2])
   split($0, parts, ": "); split(parts[2], colors, /[(),]/)
   r = int(colors[2]); g = int(colors[3]); b = int(colors[4])
-  if (y % 2 == 0) { R[x]=r; G[x]=g; B[x]=b }
+  a = (colors[5] ~ /[0-9]/) ? int(colors[5]) : 255
+  if (y % 2 == 0) { R[x]=r; G[x]=g; B[x]=b; A[x]=a }
   else {
-    printf "\033[48;2;%d;%d;%dm\033[38;2;%d;%d;%dm▄", R[x],G[x],B[x],r,g,b
+    top = (A[x] < 128); bot = (a < 128)
+    if      (top && bot)  printf "\033[0m "
+    else if (top)         printf "\033[0m\033[38;2;%d;%d;%dm▄", r, g, b
+    else if (bot)         printf "\033[0m\033[38;2;%d;%d;%dm▀", R[x], G[x], B[x]
+    else                  printf "\033[48;2;%d;%d;%dm\033[38;2;%d;%d;%dm▄", R[x],G[x],B[x],r,g,b
     if (x == cols - 1) printf "\033[0m\r\n"
   }
 }
-EOF
+HALF_EOF
+    ;;
+  sextant)
+    cat > "$AWKSCRIPT" << 'SEXTANT_EOF'
+BEGIN {
+  # Bit layout: bit0=top-left(1), bit1=top-right(2), bit2=mid-left(4),
+  #             bit3=mid-right(8), bit4=bot-left(16), bit5=bot-right(32)
+  bit_val[0]=1; bit_val[1]=2; bit_val[2]=4
+  bit_val[3]=8; bit_val[4]=16; bit_val[5]=32
+  # Build sextant lookup: bitmask -> Unicode character
+  # U+1FB00-U+1FB3B (60 chars) cover all bitmasks except 0, 15, 48, 63
+  # which are space, U+2580 (upper half), U+2584 (lower half), U+2588 (full block)
+  for (b = 0; b <= 63; b++) {
+    if      (b == 0)  cp = 0x20
+    else if (b == 15) cp = 0x2580
+    else if (b == 48) cp = 0x2584
+    else if (b == 63) cp = 0x2588
+    else if (b < 15)  cp = 0x1FB00 + (b - 1)
+    else if (b < 48)  cp = 0x1FB0E + (b - 16)
+    else              cp = 0x1FB2E + (b - 49)
+    sextant[b] = sprintf("%c", cp)
+  }
+}
+/^#/ { printf "\033[H"; next }
+{
+  split($1, coords, ",")
+  x = int(coords[1]); y = int(coords[2])
+  split($0, parts, ": "); split(parts[2], colors, /[(),]/)
+  r = int(colors[2]); g = int(colors[3]); b = int(colors[4])
+  a = (colors[5] ~ /[0-9]/) ? int(colors[5]) : 255
+
+  row = y % 3
+  if (row == 0) { R0[x]=r; G0[x]=g; B0[x]=b; A0[x]=a }
+  else if (row == 1) { R1[x]=r; G1[x]=g; B1[x]=b; A1[x]=a }
+  else {
+    R2[x]=r; G2[x]=g; B2[x]=b; A2[x]=a
+    if (x % 2 == 1) {
+      xl = x - 1
+      pr[0]=R0[xl]; pg[0]=G0[xl]; pb[0]=B0[xl]; pa[0]=A0[xl]
+      pr[1]=R0[x];  pg[1]=G0[x];  pb[1]=B0[x];  pa[1]=A0[x]
+      pr[2]=R1[xl]; pg[2]=G1[xl]; pb[2]=B1[xl]; pa[2]=A1[xl]
+      pr[3]=R1[x];  pg[3]=G1[x];  pb[3]=B1[x];  pa[3]=A1[x]
+      pr[4]=R2[xl]; pg[4]=G2[xl]; pb[4]=B2[xl]; pa[4]=A2[xl]
+      pr[5]=R2[x];  pg[5]=G2[x];  pb[5]=B2[x];  pa[5]=A2[x]
+
+      # check full transparency
+      all_trans = 1
+      for (i = 0; i < 6; i++) if (pa[i] >= 128) { all_trans = 0; break }
+      if (all_trans) {
+        printf "\033[0m "
+        if (x == cols*2 - 1) printf "\033[0m\r\n"
+        next
+      }
+
+      lum_min = 255; lum_max = 0
+      for (i = 0; i < 6; i++) {
+        lm[i] = 0.299*pr[i] + 0.587*pg[i] + 0.114*pb[i]
+        if (pa[i] < 128) continue
+        if (lm[i] < lum_min) lum_min = lm[i]
+        if (lm[i] > lum_max) lum_max = lm[i]
+      }
+      # midpoint threshold: more stable on edges than average
+      mid_lum = (lum_min + lum_max) / 2
+
+      fg_r=0; fg_g=0; fg_b=0; fg_n=0
+      bg_r=0; bg_g=0; bg_b=0; bg_n=0
+      bitmask = 0
+      for (i = 0; i < 6; i++) {
+        if (pa[i] < 128) continue
+        if (lm[i] >= mid_lum) {
+          bitmask += bit_val[i]
+          fg_r += pr[i]; fg_g += pg[i]; fg_b += pb[i]; fg_n++
+        } else {
+          bg_r += pr[i]; bg_g += pg[i]; bg_b += pb[i]; bg_n++
+        }
+      }
+
+      if (fg_n > 0) { fg_r=int(fg_r/fg_n); fg_g=int(fg_g/fg_n); fg_b=int(fg_b/fg_n) }
+      else           { fg_r=255; fg_g=255; fg_b=255 }
+
+      if (bg_n > 0) {
+        bg_r=int(bg_r/bg_n); bg_g=int(bg_g/bg_n); bg_b=int(bg_b/bg_n)
+        printf "\033[48;2;%d;%d;%dm\033[38;2;%d;%d;%dm%s", bg_r,bg_g,bg_b, fg_r,fg_g,fg_b, sextant[bitmask]
+      } else {
+        printf "\033[0m\033[38;2;%d;%d;%dm%s", fg_r,fg_g,fg_b, sextant[bitmask]
+      }
+      if (x == cols*2 - 1) printf "\033[0m\r\n"
+    }
+  }
+}
+SEXTANT_EOF
+    ;;
+  sextant-bayer)
+    cat > "$AWKSCRIPT" << 'BAYER_EOF'
+BEGIN {
+  # Bit layout: bit0=top-left(1), bit1=top-right(2), bit2=mid-left(4),
+  #             bit3=mid-right(8), bit4=bot-left(16), bit5=bot-right(32)
+  bit_val[0]=1; bit_val[1]=2; bit_val[2]=4
+  bit_val[3]=8; bit_val[4]=16; bit_val[5]=32
+  # Build sextant lookup: bitmask -> Unicode character
+  # U+1FB00-U+1FB3B (60 chars) cover all bitmasks except 0, 15, 48, 63
+  # which are space, U+2580 (upper half), U+2584 (lower half), U+2588 (full block)
+  for (b = 0; b <= 63; b++) {
+    if      (b == 0)  cp = 0x20
+    else if (b == 15) cp = 0x2580
+    else if (b == 48) cp = 0x2584
+    else if (b == 63) cp = 0x2588
+    else if (b < 15)  cp = 0x1FB00 + (b - 1)
+    else if (b < 48)  cp = 0x1FB0E + (b - 16)
+    else              cp = 0x1FB2E + (b - 49)
+    sextant[b] = sprintf("%c", cp)
+  }
+  # 4x4 Bayer ordered dither matrix (row-major)
+  bayer[0][0]= 0; bayer[0][1]= 8; bayer[0][2]= 2; bayer[0][3]=10
+  bayer[1][0]=12; bayer[1][1]= 4; bayer[1][2]=14; bayer[1][3]= 6
+  bayer[2][0]= 3; bayer[2][1]=11; bayer[2][2]= 1; bayer[2][3]= 9
+  bayer[3][0]=15; bayer[3][1]= 7; bayer[3][2]=13; bayer[3][3]= 5
+}
+/^#/ { printf "\033[H"; next }
+{
+  split($1, coords, ",")
+  x = int(coords[1]); y = int(coords[2])
+  split($0, parts, ": "); split(parts[2], colors, /[(),]/)
+  r = int(colors[2]); g = int(colors[3]); b = int(colors[4])
+  a = (colors[5] ~ /[0-9]/) ? int(colors[5]) : 255
+
+  row = y % 3
+  if (row == 0) { R0[x]=r; G0[x]=g; B0[x]=b; A0[x]=a }
+  else if (row == 1) { R1[x]=r; G1[x]=g; B1[x]=b; A1[x]=a }
+  else {
+    R2[x]=r; G2[x]=g; B2[x]=b; A2[x]=a
+    if (x % 2 == 1) {
+      xl = x - 1
+      pr[0]=R0[xl]; pg[0]=G0[xl]; pb[0]=B0[xl]; pa[0]=A0[xl]
+      pr[1]=R0[x];  pg[1]=G0[x];  pb[1]=B0[x];  pa[1]=A0[x]
+      pr[2]=R1[xl]; pg[2]=G1[xl]; pb[2]=B1[xl]; pa[2]=A1[xl]
+      pr[3]=R1[x];  pg[3]=G1[x];  pb[3]=B1[x];  pa[3]=A1[x]
+      pr[4]=R2[xl]; pg[4]=G2[xl]; pb[4]=B2[xl]; pa[4]=A2[xl]
+      pr[5]=R2[x];  pg[5]=G2[x];  pb[5]=B2[x];  pa[5]=A2[x]
+
+      # Absolute pixel coordinates for each of the 6 dots in the sextant cell
+      # y is the bottom row of the 3-row band
+      dot_px[0]=xl; dot_py[0]=y-2
+      dot_px[1]=x;  dot_py[1]=y-2
+      dot_px[2]=xl; dot_py[2]=y-1
+      dot_px[3]=x;  dot_py[3]=y-1
+      dot_px[4]=xl; dot_py[4]=y
+      dot_px[5]=x;  dot_py[5]=y
+
+      # check full transparency
+      all_trans = 1
+      for (i = 0; i < 6; i++) if (pa[i] >= 128) { all_trans = 0; break }
+      if (all_trans) {
+        printf "\033[0m "
+        if (x == cols*2 - 1) printf "\033[0m\r\n"
+        next
+      }
+
+      lum_min = 255; lum_max = 0
+      for (i = 0; i < 6; i++) {
+        lm[i] = 0.299*pr[i] + 0.587*pg[i] + 0.114*pb[i]
+        if (pa[i] < 128) continue
+        if (lm[i] < lum_min) lum_min = lm[i]
+        if (lm[i] > lum_max) lum_max = lm[i]
+      }
+      mid_lum = (lum_min + lum_max) / 2
+
+      fg_r=0; fg_g=0; fg_b=0; fg_n=0
+      bg_r=0; bg_g=0; bg_b=0; bg_n=0
+      bitmask = 0
+      for (i = 0; i < 6; i++) {
+        if (pa[i] < 128) continue
+        # Bayer ordered dithering: per-dot threshold perturbed by matrix value
+        bayer_offset = (bayer[dot_py[i] % 4][dot_px[i] % 4] - 7.5) / 16.0
+        dot_thresh = mid_lum + bayer_offset * (lum_max - lum_min)
+        if (lm[i] >= dot_thresh) {
+          bitmask += bit_val[i]
+          fg_r += pr[i]; fg_g += pg[i]; fg_b += pb[i]; fg_n++
+        } else {
+          bg_r += pr[i]; bg_g += pg[i]; bg_b += pb[i]; bg_n++
+        }
+      }
+
+      if (fg_n > 0) { fg_r=int(fg_r/fg_n); fg_g=int(fg_g/fg_n); fg_b=int(fg_b/fg_n) }
+      else           { fg_r=255; fg_g=255; fg_b=255 }
+
+      if (bg_n > 0) {
+        bg_r=int(bg_r/bg_n); bg_g=int(bg_g/bg_n); bg_b=int(bg_b/bg_n)
+        printf "\033[48;2;%d;%d;%dm\033[38;2;%d;%d;%dm%s", bg_r,bg_g,bg_b, fg_r,fg_g,fg_b, sextant[bitmask]
+      } else {
+        printf "\033[0m\033[38;2;%d;%d;%dm%s", fg_r,fg_g,fg_b, sextant[bitmask]
+      }
+      if (x == cols*2 - 1) printf "\033[0m\r\n"
+    }
+  }
+}
+BAYER_EOF
+    ;;
+  sextant-fs)
+    cat > "$AWKSCRIPT" << 'FS_EOF'
+BEGIN {
+  bit_val[0]=1; bit_val[1]=2; bit_val[2]=4
+  bit_val[3]=8; bit_val[4]=16; bit_val[5]=32
+  for (b = 0; b <= 63; b++) {
+    if      (b == 0)  cp = 0x20
+    else if (b == 15) cp = 0x2580
+    else if (b == 48) cp = 0x2584
+    else if (b == 63) cp = 0x2588
+    else if (b < 15)  cp = 0x1FB00 + (b - 1)
+    else if (b < 48)  cp = 0x1FB0E + (b - 16)
+    else              cp = 0x1FB2E + (b - 49)
+    sextant[b] = sprintf("%c", cp)
+  }
+  img_w = 0; img_h = 0; has_header = 0
+}
+/^#/ { has_header = 1; next }
+{
+  split($1, coords, ",")
+  x = int(coords[1]); y = int(coords[2])
+  split($0, parts, ": "); split(parts[2], colors, /[(),]/)
+  r = int(colors[2]); g = int(colors[3]); b = int(colors[4])
+  a = (colors[5] ~ /[0-9]/) ? int(colors[5]) : 255
+
+  PR[y][x] = r; PG[y][x] = g; PB[y][x] = b; PA[y][x] = a
+  LM[y][x] = 0.299*r + 0.587*g + 0.114*b
+
+  if (x + 1 > img_w) img_w = x + 1
+  if (y + 1 > img_h) img_h = y + 1
+}
+END {
+  if (has_header) printf "\033[H"
+
+  # Phase 2a: Floyd-Steinberg error diffusion over full image
+  for (fy = 0; fy < img_h; fy++) {
+    for (fx = 0; fx < img_w; fx++) {
+      if (PA[fy][fx] + 0 < 128) {
+        bright[fy][fx] = -1  # transparent
+        next_dot = 1
+        continue
+      }
+      adjusted = LM[fy][fx] + 0 + (E[fy][fx] + 0)
+      clamped = (adjusted < 0) ? 0 : (adjusted > 255 ? 255 : adjusted)
+      quant = (clamped >= 128) ? 255 : 0
+      err = clamped - quant
+      bright[fy][fx] = (quant == 255) ? 1 : 0
+
+      if (fx + 1 < img_w)             E[fy][fx+1]   += err * 7 / 16
+      if (fy + 1 < img_h) {
+        if (fx - 1 >= 0)              E[fy+1][fx-1] += err * 3 / 16
+                                      E[fy+1][fx]   += err * 5 / 16
+        if (fx + 1 < img_w)           E[fy+1][fx+1] += err * 1 / 16
+      }
+    }
+  }
+
+  # Phase 2b: output sextant cells
+  char_rows = int(img_h / 3)
+  for (cy = 0; cy < char_rows; cy++) {
+    for (cx = 0; cx < cols; cx++) {
+      xl    = cx * 2
+      xr    = cx * 2 + 1
+      y_top = cy * 3
+      y_mid = cy * 3 + 1
+      y_bot = cy * 3 + 2
+
+      # dot layout: [0]=top-left [1]=top-right [2]=mid-left [3]=mid-right [4]=bot-left [5]=bot-right
+      dot_y[0]=y_top; dot_x[0]=xl
+      dot_y[1]=y_top; dot_x[1]=xr
+      dot_y[2]=y_mid; dot_x[2]=xl
+      dot_y[3]=y_mid; dot_x[3]=xr
+      dot_y[4]=y_bot; dot_x[4]=xl
+      dot_y[5]=y_bot; dot_x[5]=xr
+
+      all_trans = 1
+      for (i = 0; i < 6; i++) {
+        if ((PA[dot_y[i]][dot_x[i]] + 0) >= 128) { all_trans = 0; break }
+      }
+      if (all_trans) {
+        printf "\033[0m "
+        if (cx == cols - 1) printf "\033[0m\r\n"
+        continue
+      }
+
+      fg_r=0; fg_g=0; fg_b=0; fg_n=0
+      bg_r=0; bg_g=0; bg_b=0; bg_n=0
+      bitmask = 0
+      for (i = 0; i < 6; i++) {
+        dy = dot_y[i]; dx = dot_x[i]
+        if ((PA[dy][dx] + 0) < 128) continue
+        r = PR[dy][dx] + 0; g = PG[dy][dx] + 0; b = PB[dy][dx] + 0
+        if (bright[dy][dx] == 1) {
+          bitmask += bit_val[i]
+          fg_r += r; fg_g += g; fg_b += b; fg_n++
+        } else {
+          bg_r += r; bg_g += g; bg_b += b; bg_n++
+        }
+      }
+
+      if (fg_n > 0) { fg_r=int(fg_r/fg_n); fg_g=int(fg_g/fg_n); fg_b=int(fg_b/fg_n) }
+      else           { fg_r=255; fg_g=255; fg_b=255 }
+
+      if (bg_n > 0) {
+        bg_r=int(bg_r/bg_n); bg_g=int(bg_g/bg_n); bg_b=int(bg_b/bg_n)
+        printf "\033[48;2;%d;%d;%dm\033[38;2;%d;%d;%dm%s", bg_r,bg_g,bg_b, fg_r,fg_g,fg_b, sextant[bitmask]
+      } else {
+        printf "\033[0m\033[38;2;%d;%d;%dm%s", fg_r,fg_g,fg_b, sextant[bitmask]
+      }
+      if (cx == cols - 1) printf "\033[0m\r\n"
+    }
+  }
+}
+FS_EOF
+    ;;
+  braille)
+    cat > "$AWKSCRIPT" << 'BRAILLE_EOF'
+/^#/ { printf "\033[H"; next }
+{
+  split($1, coords, ",")
+  x = int(coords[1]); y = int(coords[2])
+  split($0, parts, ": "); split(parts[2], colors, /[(),]/)
+  r = int(colors[2]); g = int(colors[3]); b = int(colors[4])
+  a = (colors[5] ~ /[0-9]/) ? int(colors[5]) : 255
+
+  PR[y%4][x] = r " " g " " b " " a
+
+  if (y % 4 == 3 && x + 1 == cols * 2) {
+    for (bx = 0; bx < cols*2; bx += 2) {
+      # dot positions in the 2x4 block:
+      # row 0: dot1(bx,y-3) dot4(bx+1,y-3)
+      # row 1: dot2(bx,y-2) dot5(bx+1,y-2)
+      # row 2: dot3(bx,y-1) dot6(bx+1,y-1)
+      # row 3: dot7(bx,y)   dot8(bx+1,y)
+      # bits:  0,1,2,6      3,4,5,7
+
+      n = split(PR[0][bx],   p0l); lr0 = p0l[1]; lg0 = p0l[2]; lb0 = p0l[3]; la0 = p0l[4]
+      n = split(PR[0][bx+1], p0r); rr0 = p0r[1]; rg0 = p0r[2]; rb0 = p0r[3]; ra0 = p0r[4]
+      n = split(PR[1][bx],   p1l); lr1 = p1l[1]; lg1 = p1l[2]; lb1 = p1l[3]; la1 = p1l[4]
+      n = split(PR[1][bx+1], p1r); rr1 = p1r[1]; rg1 = p1r[2]; rb1 = p1r[3]; ra1 = p1r[4]
+      n = split(PR[2][bx],   p2l); lr2 = p2l[1]; lg2 = p2l[2]; lb2 = p2l[3]; la2 = p2l[4]
+      n = split(PR[2][bx+1], p2r); rr2 = p2r[1]; rg2 = p2r[2]; rb2 = p2r[3]; ra2 = p2r[4]
+      n = split(PR[3][bx],   p3l); lr3 = p3l[1]; lg3 = p3l[2]; lb3 = p3l[3]; la3 = p3l[4]
+      n = split(PR[3][bx+1], p3r); rr3 = p3r[1]; rg3 = p3r[2]; rb3 = p3r[3]; ra3 = p3r[4]
+
+      # pixel arrays: index 0-7 = dot1..dot8
+      pr[0]=lr0; pg[0]=lg0; pb[0]=lb0; pa[0]=la0  # dot1 bit0  left  row0
+      pr[1]=lr1; pg[1]=lg1; pb[1]=lb1; pa[1]=la1  # dot2 bit1  left  row1
+      pr[2]=lr2; pg[2]=lg2; pb[2]=lb2; pa[2]=la2  # dot3 bit2  left  row2
+      pr[3]=rr0; pg[3]=rg0; pb[3]=rb0; pa[3]=ra0  # dot4 bit3  right row0
+      pr[4]=rr1; pg[4]=rg1; pb[4]=rb1; pa[4]=ra1  # dot5 bit4  right row1
+      pr[5]=rr2; pg[5]=rg2; pb[5]=rb2; pa[5]=ra2  # dot6 bit5  right row2
+      pr[6]=lr3; pg[6]=lg3; pb[6]=lb3; pa[6]=la3  # dot7 bit6  left  row3
+      pr[7]=rr3; pg[7]=rg3; pb[7]=rb3; pa[7]=ra3  # dot8 bit7  right row3
+
+      # check full transparency
+      all_trans = 1
+      for (i = 0; i < 8; i++) if (pa[i] >= 128) { all_trans = 0; break }
+      if (all_trans) {
+        printf "\033[0m "
+        if (bx + 2 == cols*2) printf "\033[0m\r\n"
+        continue
+      }
+
+      # luminance and average (opaque pixels only)
+      lum_sum = 0; lum_cnt = 0
+      for (i = 0; i < 8; i++) {
+        lum[i] = 0.299*pr[i] + 0.587*pg[i] + 0.114*pb[i]
+        if (pa[i] >= 128) { lum_sum += lum[i]; lum_cnt++ }
+      }
+      avg_lum = (lum_cnt > 0) ? lum_sum / lum_cnt : 0
+
+      # threshold: on = bright, off = dark
+      for (i = 0; i < 8; i++) {
+        if (pa[i] < 128) on[i] = 0
+        else             on[i] = (lum[i] >= avg_lum) ? 1 : 0
+      }
+
+      # fg = average of on-pixels; bg = average of off-pixels
+      fg_r=0; fg_g=0; fg_b=0; fg_cnt=0
+      bg_r=0; bg_g=0; bg_b=0; bg_cnt=0
+      for (i = 0; i < 8; i++) {
+        if (pa[i] < 128) continue
+        if (on[i]) { fg_r+=pr[i]; fg_g+=pg[i]; fg_b+=pb[i]; fg_cnt++ }
+        else        { bg_r+=pr[i]; bg_g+=pg[i]; bg_b+=pb[i]; bg_cnt++ }
+      }
+      if (fg_cnt == 0) {  # all off or transparent: fallback
+        for (i = 0; i < 8; i++) if (pa[i] >= 128) { fg_r+=pr[i]; fg_g+=pg[i]; fg_b+=pb[i]; fg_cnt++ }
+      }
+      if (bg_cnt == 0) {  # all on: fallback
+        for (i = 0; i < 8; i++) if (pa[i] >= 128) { bg_r+=pr[i]; bg_g+=pg[i]; bg_b+=pb[i]; bg_cnt++ }
+      }
+      if (fg_cnt > 0) { fg_r=int(fg_r/fg_cnt); fg_g=int(fg_g/fg_cnt); fg_b=int(fg_b/fg_cnt) }
+      if (bg_cnt > 0) { bg_r=int(bg_r/bg_cnt); bg_g=int(bg_g/bg_cnt); bg_b=int(bg_b/bg_cnt) }
+
+      # bitmask from dot layout
+      bits[0]=1; bits[1]=2; bits[2]=4; bits[3]=8
+      bits[4]=16; bits[5]=32; bits[6]=64; bits[7]=128
+      bitmask = 0
+      for (i = 0; i < 8; i++) if (on[i]) bitmask += bits[i]
+
+      printf "\033[48;2;%d;%d;%dm\033[38;2;%d;%d;%dm%c", \
+        bg_r, bg_g, bg_b, fg_r, fg_g, fg_b, 0x2800 + bitmask
+
+      if (bx + 2 == cols*2) printf "\033[0m\r\n"
+    }
+    delete PR
+  }
+}
+BRAILLE_EOF
+    ;;
+esac
+
+get_resize_args() {
+  local w=$1 h=$2
+  case "$MODE" in
+    half)
+      echo "-coalesce -resize ${w}x$((h*2)) -alpha set -background none -gravity center -extent ${w}x$((h*2))"
+      ;;
+    sextant|sextant-bayer|sextant-fs)
+      echo "-coalesce -alpha set -resize ${w}x$((h*2)) -background none -gravity center -extent ${w}x$((h*2)) -resize $((w*2))x$((h*3))!"
+      ;;
+    braille)
+      echo "-coalesce -resize $((w*2))x$((h*4)) -alpha set -background none -gravity center -extent $((w*2))x$((h*4))"
+      ;;
+  esac
+}
+
+get_awk_cols() {
+  local w=$1
+  case "$MODE" in
+    half)                              echo "$w" ;;
+    sextant|sextant-bayer|sextant-fs) echo "$w" ;;
+    braille)                           echo "$w" ;;
+  esac
+}
 
 show_image() {
   local img="$1"
@@ -48,21 +517,22 @@ show_image() {
   w=$(tput cols || echo 80)
   h=$(tput lines || echo 24)
   h=$((h - 1))
+  local resize_args cols_val
+  resize_args=$(get_resize_args "$w" "$h")
+  cols_val=$(get_awk_cols "$w")
 
   [[ "$mime_type" == "image/gif" || "$mime_type" == "image/webp" ]] && is_animated=1
 
   echo -ne '\e[?25l\e[?1049h\e[2J\e[H'
 
   if [ $is_animated -eq 1 ]; then
-    # setsid gives the pipeline its own process group so we can kill it cleanly
-    setsid bash -c \
-      'convert "$1" -coalesce -resize "$2x$(($3*2))!" txt:- | awk -v cols="$2" -f "$4"' \
-      -- "$img" "$w" "$h" "$AWKSCRIPT" &
+    RESIZE_ARGS="$resize_args" COLS_VAL="$cols_val" setsid bash -c \
+      'convert "$1" $RESIZE_ARGS txt:- | awk -v cols="$COLS_VAL" -f "$2"' \
+      -- "$img" "$AWKSCRIPT" &
     local render_pid=$!
     local pgid
     pgid=$(ps -o pgid= -p $render_pid 2>/dev/null | tr -d ' ')
     RENDER_PGID="$pgid"
-
     while kill -0 $render_pid 2>/dev/null; do
       if read -s -n 1 -t 0.1 2>/dev/null; then
         [ -n "$pgid" ] && kill -- -"$pgid" 2>/dev/null
@@ -72,7 +542,7 @@ show_image() {
     done
     RENDER_PGID=""
   else
-    convert "$img" -coalesce -resize "${w}x$((h * 2))!" txt:- | awk -v cols="$w" -f "$AWKSCRIPT"
+    convert "$img" $resize_args txt:- | awk -v cols="$cols_val" -f "$AWKSCRIPT"
     read -s -n 1
   fi
 }
@@ -85,4 +555,3 @@ for img in "$@"; do
   show_image "$img"
 done
 
-cleanup

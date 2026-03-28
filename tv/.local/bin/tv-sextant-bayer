@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+
+if ! command -v convert &>/dev/null; then
+  echo "error: imagemagick is required (apt install imagemagick)" >&2
+  exit 1
+fi
+
+if [ $# -eq 0 ]; then
+  echo "Usage: tv-sextant-bayer <image> [image...]" >&2
+  exit 1
+fi
+
+RENDER_PGID=""
+
+cleanup() {
+  [ -n "$RENDER_PGID" ] && kill -- -"$RENDER_PGID" 2>/dev/null
+  rm -f "$AWKSCRIPT"
+  echo -ne '\e[?25h\e[0m\e[?1049l'
+  exit 0
+}
+AWKSCRIPT=$(mktemp /tmp/tv_awk.XXXXXX)
+trap cleanup INT TERM EXIT
+cat > "$AWKSCRIPT" << 'EOF'
+BEGIN {
+  # Bit layout: bit0=top-left(1), bit1=top-right(2), bit2=mid-left(4),
+  #             bit3=mid-right(8), bit4=bot-left(16), bit5=bot-right(32)
+  bit_val[0]=1; bit_val[1]=2; bit_val[2]=4
+  bit_val[3]=8; bit_val[4]=16; bit_val[5]=32
+  # Build sextant lookup: bitmask -> Unicode character
+  # U+1FB00-U+1FB3B (60 chars) cover all bitmasks except 0, 15, 48, 63
+  # which are space, U+2580 (upper half), U+2584 (lower half), U+2588 (full block)
+  for (b = 0; b <= 63; b++) {
+    if      (b == 0)  cp = 0x20
+    else if (b == 15) cp = 0x2580
+    else if (b == 48) cp = 0x2584
+    else if (b == 63) cp = 0x2588
+    else if (b < 15)  cp = 0x1FB00 + (b - 1)
+    else if (b < 48)  cp = 0x1FB0E + (b - 16)
+    else              cp = 0x1FB2E + (b - 49)
+    sextant[b] = sprintf("%c", cp)
+  }
+  # 4x4 Bayer ordered dither matrix (row-major)
+  bayer[0][0]= 0; bayer[0][1]= 8; bayer[0][2]= 2; bayer[0][3]=10
+  bayer[1][0]=12; bayer[1][1]= 4; bayer[1][2]=14; bayer[1][3]= 6
+  bayer[2][0]= 3; bayer[2][1]=11; bayer[2][2]= 1; bayer[2][3]= 9
+  bayer[3][0]=15; bayer[3][1]= 7; bayer[3][2]=13; bayer[3][3]= 5
+}
+/^#/ { printf "\033[H"; next }
+{
+  split($1, coords, ",")
+  x = int(coords[1]); y = int(coords[2])
+  split($0, parts, ": "); split(parts[2], colors, /[(),]/)
+  r = int(colors[2]); g = int(colors[3]); b = int(colors[4])
+  a = (colors[5] ~ /[0-9]/) ? int(colors[5]) : 255
+
+  row = y % 3
+  if (row == 0) { R0[x]=r; G0[x]=g; B0[x]=b; A0[x]=a }
+  else if (row == 1) { R1[x]=r; G1[x]=g; B1[x]=b; A1[x]=a }
+  else {
+    R2[x]=r; G2[x]=g; B2[x]=b; A2[x]=a
+    if (x % 2 == 1) {
+      xl = x - 1
+      pr[0]=R0[xl]; pg[0]=G0[xl]; pb[0]=B0[xl]; pa[0]=A0[xl]
+      pr[1]=R0[x];  pg[1]=G0[x];  pb[1]=B0[x];  pa[1]=A0[x]
+      pr[2]=R1[xl]; pg[2]=G1[xl]; pb[2]=B1[xl]; pa[2]=A1[xl]
+      pr[3]=R1[x];  pg[3]=G1[x];  pb[3]=B1[x];  pa[3]=A1[x]
+      pr[4]=R2[xl]; pg[4]=G2[xl]; pb[4]=B2[xl]; pa[4]=A2[xl]
+      pr[5]=R2[x];  pg[5]=G2[x];  pb[5]=B2[x];  pa[5]=A2[x]
+
+      # Absolute pixel coordinates for each of the 6 dots in the sextant cell
+      # y is the bottom row of the 3-row band
+      dot_px[0]=xl; dot_py[0]=y-2
+      dot_px[1]=x;  dot_py[1]=y-2
+      dot_px[2]=xl; dot_py[2]=y-1
+      dot_px[3]=x;  dot_py[3]=y-1
+      dot_px[4]=xl; dot_py[4]=y
+      dot_px[5]=x;  dot_py[5]=y
+
+      # check full transparency
+      all_trans = 1
+      for (i = 0; i < 6; i++) if (pa[i] >= 128) { all_trans = 0; break }
+      if (all_trans) {
+        printf "\033[0m "
+        if (x == cols*2 - 1) printf "\033[0m\r\n"
+        next
+      }
+
+      lum_min = 255; lum_max = 0
+      for (i = 0; i < 6; i++) {
+        lm[i] = 0.299*pr[i] + 0.587*pg[i] + 0.114*pb[i]
+        if (pa[i] < 128) continue
+        if (lm[i] < lum_min) lum_min = lm[i]
+        if (lm[i] > lum_max) lum_max = lm[i]
+      }
+      mid_lum = (lum_min + lum_max) / 2
+
+      fg_r=0; fg_g=0; fg_b=0; fg_n=0
+      bg_r=0; bg_g=0; bg_b=0; bg_n=0
+      bitmask = 0
+      for (i = 0; i < 6; i++) {
+        if (pa[i] < 128) continue
+        # Bayer ordered dithering: per-dot threshold perturbed by matrix value
+        bayer_offset = (bayer[dot_py[i] % 4][dot_px[i] % 4] - 7.5) / 16.0
+        dot_thresh = mid_lum + bayer_offset * (lum_max - lum_min)
+        if (lm[i] >= dot_thresh) {
+          bitmask += bit_val[i]
+          fg_r += pr[i]; fg_g += pg[i]; fg_b += pb[i]; fg_n++
+        } else {
+          bg_r += pr[i]; bg_g += pg[i]; bg_b += pb[i]; bg_n++
+        }
+      }
+
+      if (fg_n > 0) { fg_r=int(fg_r/fg_n); fg_g=int(fg_g/fg_n); fg_b=int(fg_b/fg_n) }
+      else           { fg_r=255; fg_g=255; fg_b=255 }
+
+      if (bg_n > 0) {
+        bg_r=int(bg_r/bg_n); bg_g=int(bg_g/bg_n); bg_b=int(bg_b/bg_n)
+        printf "\033[48;2;%d;%d;%dm\033[38;2;%d;%d;%dm%s", bg_r,bg_g,bg_b, fg_r,fg_g,fg_b, sextant[bitmask]
+      } else {
+        printf "\033[0m\033[38;2;%d;%d;%dm%s", fg_r,fg_g,fg_b, sextant[bitmask]
+      }
+      if (x == cols*2 - 1) printf "\033[0m\r\n"
+    }
+  }
+}
+EOF
+
+show_image() {
+  local img="$1"
+  local mime_type w h is_animated=0
+
+  mime_type=$(file -b --mime-type "$img")
+  if [[ "$mime_type" != image/* ]]; then
+    echo "error: '$img' is not an image ($mime_type)" >&2
+    return 1
+  fi
+
+  w=$(tput cols || echo 80)
+  h=$(tput lines || echo 24)
+  h=$((h - 1))
+
+  [[ "$mime_type" == "image/gif" || "$mime_type" == "image/webp" ]] && is_animated=1
+
+  echo -ne '\e[?25l\e[?1049h\e[2J\e[H'
+
+  if [ $is_animated -eq 1 ]; then
+    setsid bash -c \
+      'convert "$1" -coalesce -alpha set -resize "$2x$(($3*2))" -background none -gravity center -extent "$2x$(($3*2))" -resize "$(($2*2))x$(($3*3))!" txt:- | awk -v cols="$2" -f "$4"' \
+      -- "$img" "$w" "$h" "$AWKSCRIPT" &
+    local render_pid=$!
+    local pgid
+    pgid=$(ps -o pgid= -p $render_pid 2>/dev/null | tr -d ' ')
+    RENDER_PGID="$pgid"
+
+    while kill -0 $render_pid 2>/dev/null; do
+      if read -s -n 1 -t 0.1 2>/dev/null; then
+        [ -n "$pgid" ] && kill -- -"$pgid" 2>/dev/null
+        wait $render_pid 2>/dev/null
+        break
+      fi
+    done
+    RENDER_PGID=""
+  else
+    convert "$img" -coalesce -alpha set -resize "${w}x$((h*2))" -background none -gravity center -extent "${w}x$((h*2))" -resize "$((w*2))x$((h*3))!" txt:- | awk -v cols="$w" -f "$AWKSCRIPT"
+    read -s -n 1
+  fi
+}
+
+for img in "$@"; do
+  if [ ! -f "$img" ]; then
+    echo "error: '$img' not found" >&2
+    continue
+  fi
+  show_image "$img"
+done
