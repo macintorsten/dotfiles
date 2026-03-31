@@ -2,21 +2,19 @@
 set -e
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
-AQUA_BIN="${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua/bin/aqua"
+MISE_BIN="${HOME}/.local/bin/mise"
+MISE_GLOBAL_CONFIG_FILE="$REPO/mise/.config/mise/config.toml"
 BASHRC_LINE='[ -f "$HOME/.bashrc.d" ] && . "$HOME/.bashrc.d"'
 
-# stow
 if ! command -v stow &>/dev/null; then
-    if   [ -f /etc/debian_version ]; then sudo apt-get update && sudo apt-get install -y stow
-    elif [ -f /etc/redhat-release ]; then sudo yum install -y epel-release && sudo yum install -y stow
-    elif [ -f /etc/arch-release ];   then sudo pacman -Sy --noconfirm stow
-    elif [ -f /etc/alpine-release ]; then sudo apk add stow
-    else echo "Unsupported distro. Install stow manually." && exit 1
-    fi
+    echo "stow is required but is not installed. Install it yourself before running 'stow */'."
 fi
 
-# aqua
-[ -f "$AQUA_BIN" ] || curl -sSfL https://raw.githubusercontent.com/aquaproj/aqua-installer/main/aqua-installer | bash
+# mise
+if [ ! -x "$MISE_BIN" ]; then
+    mkdir -p "${MISE_BIN%/*}"
+    curl -fsSL https://mise.run | MISE_INSTALL_PATH="$MISE_BIN" sh
+fi
 
 # tpm
 [ -d "$HOME/.tmux/plugins/tpm" ] || git clone https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm"
@@ -28,5 +26,17 @@ fi
 # bashrc integration (once)
 grep -qF "$BASHRC_LINE" "$HOME/.bashrc" 2>/dev/null || echo "$BASHRC_LINE" >> "$HOME/.bashrc"
 
-# install aqua tools (default tag only)
-AQUA_CONFIG="$REPO/aqua/.config/aquaproj-aqua/aqua.yaml" "$AQUA_BIN" install --tags default
+# install mise tools from the repo's global config
+for attempt in 1 2 3 4 5; do
+    if MISE_GLOBAL_CONFIG_FILE="$MISE_GLOBAL_CONFIG_FILE" "$MISE_BIN" install; then
+        break
+    fi
+
+    if [ "$attempt" -eq 3 ]; then
+        echo "mise install failed after $attempt attempts."
+        exit 1
+    fi
+
+    echo "mise install failed; retrying ($attempt/3)..."
+    sleep $attempt
+done

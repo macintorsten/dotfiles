@@ -1,0 +1,23 @@
+min_version = "2025.12.0"
+
+[settings]
+idiomatic_version_file_enable_tools = ["node"]
+
+[tools]
+bat = "0.26.1"
+delta = "0.19.2"
+dust = "1.2.4"
+fd = "10.4.2"
+fzf = "0.70.0"
+gh = "2.89.0"
+hk = "1.39.0"
+jq = "1.8.1"
+"oh-my-posh" = "29.9.2"
+pitchfork = "2.3.0"
+rg = "15.1.0"
+tmux = "3.6a"
+uv = "0.11.2"
+yq = "4.52.5"
+zoxide = "0.9.9"
+
+"http:tldr" = { version = "1.8.1", url = "https://github.com/tealdeer-rs/tealdeer/releases/download/v{{ version }}/tealdeer-linux-x86_64-musl", bin = "tldr" }
