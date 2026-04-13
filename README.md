@@ -48,6 +48,15 @@ The Vim config uses `vim-fugitive` and `fzf.vim` for lightweight git navigation:
 
 If you want a small LSP upgrade later without changing editors, `vim-lsp` plus `asyncomplete.vim` would fit this setup well.
 
+## Neovim
+
+The Neovim config lives under `nvim/.config/nvim` and is intended to coexist with Vim rather than replace it.
+
+- It keeps the core shortcuts familiar: `Ctrl+P` for git files, `Ctrl+F` for files, `Ctrl+B` for buffers, and `<Leader>gg` / `<Leader>gs` / `<Leader>gd` / `<Leader>gb` for git workflows.
+- Plugins are bootstrapped with `lazy.nvim`, navigation uses `fzf-lua`, git uses `vim-fugitive` plus `gitsigns`, and LSP/completion use `mason.nvim`, `nvim-lspconfig`, and `nvim-cmp`.
+- `mise` installs the `neovim` binary, and the first `nvim` launch will install plugins automatically.
+- Open `:Mason` inside Neovim to install extra language servers. Java support is wired through `nvim-jdtls`; install a JDK plus `jdtls` from Mason, then opening a Java project will start the language server automatically.
+
 ## Test
 
 ```bash

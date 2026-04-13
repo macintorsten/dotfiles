@@ -20,3 +20,4 @@ uv = "0.11.2"
 yq = "4.52.5"
 zoxide = "0.9.9"
 "github:tealdeer-rs/tealdeer"= { version = "1.8.1", asset_pattern = "tealdeer-linux-x86_64-musl", bin = "tldr" }
+neovim = "stable"
