@@ -28,6 +28,9 @@
 
 set nu
 
+" Set leader before any <leader> mappings are defined.
+let mapleader = " "
+
 call plug#begin('~/.vim/plugged')
 Plug 'tpope/vim-fugitive'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
@@ -39,6 +42,11 @@ nnoremap <silent> <C-p> :GFiles<CR>
 nnoremap <silent> <C-f> :Files<CR>
 nnoremap <silent> <C-b> :Buffers<CR>
 nnoremap <silent> <leader>rg :Rg<CR>
+nnoremap <silent> <leader>gg :call <SID>GitGrepWord()<CR>
+xnoremap <silent> <leader>gg :<C-u>call <SID>GitGrepVisual()<CR>
+nnoremap <silent> <leader>gs :Git<CR>
+nnoremap <silent> <leader>gd :Gvdiffsplit<CR>
+nnoremap <silent> <leader>gb :Git blame<CR>
 
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -53,10 +61,6 @@ filetype indent on
 
 " Set to auto read when a file is changed from the outside
 set autoread
-
-" With a map leader it's possible to do extra key combinations
-" like <leader>w saves the current file
-let mapleader = ","
 
 " Fast saving
 nmap <leader>w :w!<cr>
@@ -351,6 +355,45 @@ function! HasPaste()
         return 'PASTE MODE  '
     endif
     return ''
+endfunction
+
+function! s:OpenQuickfix()
+    cwindow
+    if empty(getqflist())
+        echo 'No matches found'
+    endif
+endfunction
+
+function! s:GitGrep(pattern)
+    if empty(a:pattern)
+        echo 'GitGrep: empty pattern'
+        return
+    endif
+
+    silent execute 'Ggrep! ' . shellescape(a:pattern)
+    call s:OpenQuickfix()
+endfunction
+
+function! s:GetVisualSelection() abort
+    let l:view = winsaveview()
+    let l:register = getreg('"')
+    let l:register_type = getregtype('"')
+
+    silent normal! ""gvy
+    let l:selection = substitute(@", '\n\+$', '', '')
+
+    call setreg('"', l:register, l:register_type)
+    call winrestview(l:view)
+
+    return l:selection
+endfunction
+
+function! s:GitGrepWord() abort
+    call s:GitGrep(expand('<cword>'))
+endfunction
+
+function! s:GitGrepVisual() range abort
+    call s:GitGrep(s:GetVisualSelection())
 endfunction
 
 " Don't close window, when deleting a buffer

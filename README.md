@@ -36,6 +36,18 @@ mise install
 
 `fnm` has been replaced with `mise`. The config enables Node idiomatic version files, so `.nvmrc`-based projects can still work once you install a Node version with `mise use -g node@lts`.
 
+## Vim
+
+The Vim config uses `vim-fugitive` and `fzf.vim` for lightweight git navigation:
+
+- `Ctrl+P` opens `:GFiles`
+- `<Leader>gg` runs a repo-scoped `git grep` for the current word, or the visual selection, and opens quickfix
+- `<Leader>gs` opens Fugitive status
+- `<Leader>gd` opens a vertical git diff
+- `<Leader>gb` opens git blame
+
+If you want a small LSP upgrade later without changing editors, `vim-lsp` plus `asyncomplete.vim` would fit this setup well.
+
 ## Test
 
 ```bash
