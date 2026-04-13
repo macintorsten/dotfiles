@@ -8,6 +8,8 @@ local function project_files()
     require("fzf-lua").files()
 end
 
+local has_native_lsp_enable = vim.lsp and vim.lsp.config and vim.lsp.enable
+
 return {
     {
         "folke/which-key.nvim",
@@ -84,6 +86,7 @@ return {
         opts = {
             ensure_installed = { "bashls", "jsonls", "lua_ls", "yamlls" },
             automatic_installation = true,
+            automatic_enable = has_native_lsp_enable and true or false,
         },
     },
     {
@@ -147,10 +150,11 @@ return {
     {
         "nvim-treesitter/nvim-treesitter",
         build = ":TSUpdate",
+        cmd = { "TSInstall", "TSInstallInfo", "TSUpdate", "TSUninstall" },
         event = { "BufReadPost", "BufNewFile" },
         config = function()
-            require("nvim-treesitter.configs").setup({
-                ensure_installed = { "bash", "json", "lua", "markdown", "vim", "vimdoc", "yaml" },
+            require("nvim-treesitter").setup({
+                ensure_installed = { "bash", "java", "json", "lua", "markdown", "vim", "vimdoc", "yaml" },
                 highlight = { enable = true },
                 indent = { enable = true },
             })

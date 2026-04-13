@@ -7,6 +7,8 @@ if ok_cmp then
     M.capabilities = cmp_lsp.default_capabilities(M.capabilities)
 end
 
+local has_native_lsp_api = vim.lsp and vim.lsp.config and vim.lsp.enable
+
 function M.on_attach(_, bufnr)
     local map = function(mode, lhs, rhs, desc)
         vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, desc = desc })
@@ -26,8 +28,6 @@ function M.on_attach(_, bufnr)
 end
 
 function M.setup()
-    local lspconfig = require("lspconfig")
-
     vim.diagnostic.config({
         severity_sort = true,
         float = { border = "rounded" },
@@ -62,7 +62,13 @@ function M.setup()
     for server, config in pairs(servers) do
         config.capabilities = M.capabilities
         config.on_attach = M.on_attach
-        lspconfig[server].setup(config)
+
+        if has_native_lsp_api then
+            vim.lsp.config(server, config)
+            vim.lsp.enable(server)
+        else
+            require("lspconfig")[server].setup(config)
+        end
     end
 end
 

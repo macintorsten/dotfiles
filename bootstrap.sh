@@ -6,6 +6,8 @@ MISE_BIN="${HOME}/.local/bin/mise"
 MISE_GLOBAL_CONFIG_FILE="$REPO/mise/.config/mise/config.toml"
 BASHRC_LINE='[ -f "$HOME/.bashrc.d" ] && . "$HOME/.bashrc.d"'
 
+export PATH="${MISE_BIN%/*}:$PATH"
+
 if ! command -v stow &>/dev/null; then
     echo "stow is required but is not installed. Install it yourself before running 'stow */'."
 fi
@@ -27,16 +29,20 @@ fi
 grep -qF "$BASHRC_LINE" "$HOME/.bashrc" 2>/dev/null || echo "$BASHRC_LINE" >> "$HOME/.bashrc"
 
 # install mise tools from the repo's global config
+if [ "${BOOTSTRAP_SKIP_MISE_INSTALL:-0}" = "1" ]; then
+    exit 0
+fi
+
 for attempt in 1 2 3 4 5; do
     if MISE_GLOBAL_CONFIG_FILE="$MISE_GLOBAL_CONFIG_FILE" "$MISE_BIN" install; then
         break
     fi
 
-    if [ "$attempt" -eq 3 ]; then
+    if [ "$attempt" -eq 5 ]; then
         echo "mise install failed after $attempt attempts."
         exit 1
     fi
 
-    echo "mise install failed; retrying ($attempt/3)..."
-    sleep $attempt
+    echo "mise install failed; retrying ($attempt/5)..."
+    sleep $((attempt * 3))
 done

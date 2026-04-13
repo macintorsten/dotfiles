@@ -52,10 +52,13 @@ If you want a small LSP upgrade later without changing editors, `vim-lsp` plus `
 
 The Neovim config lives under `nvim/.config/nvim` and is intended to coexist with Vim rather than replace it.
 
+- The config targets Neovim 0.12+ for the smoothest experience, while keeping a few small compatibility shims for older releases where that does not require dropping features.
 - It keeps the core shortcuts familiar: `Ctrl+P` for git files, `Ctrl+F` for files, `Ctrl+B` for buffers, and `<Leader>gg` / `<Leader>gs` / `<Leader>gd` / `<Leader>gb` for git workflows.
 - Plugins are bootstrapped with `lazy.nvim`, navigation uses `fzf-lua`, git uses `vim-fugitive` plus `gitsigns`, and LSP/completion use `mason.nvim`, `nvim-lspconfig`, and `nvim-cmp`.
-- `mise` installs the `neovim` binary, and the first `nvim` launch will install plugins automatically.
-- Open `:Mason` inside Neovim to install extra language servers. Java support is wired through `nvim-jdtls`; install a JDK plus `jdtls` from Mason, then opening a Java project will start the language server automatically.
+- Use `:Colors` or `<Leader>fc` to preview installed colorschemes with live updates.
+- `mise install` also provides the Node host (`npm:neovim`) and `tree-sitter-cli` so Neovim health checks stay cleaner.
+- Install the `neovim` binary with your system package manager, then the first `nvim` launch will install plugins automatically.
+- Java support is wired through `nvim-jdtls`; install `jdtls` from `:Mason`, and the config ensures the Java treesitter parser so once a JDK is available, opening a Maven/Gradle/git-backed Java project should mostly just work.
 
 ## Test
 

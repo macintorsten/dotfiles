@@ -32,13 +32,21 @@ local function git_grep(pattern)
     open_quickfix()
 end
 
+local function choose_colorscheme()
+    require("fzf-lua").colorschemes({ live_preview = true })
+end
+
+vim.api.nvim_create_user_command("Colors", choose_colorscheme, {
+    desc = "Preview installed colorschemes",
+})
+
 map("n", "<leader>w", "<cmd>write!<cr>", { desc = "Write file", silent = true })
-map("n", "<space>", "/", { desc = "Search", remap = true })
 map("n", "<leader><cr>", "<cmd>nohlsearch<cr>", { desc = "Clear search", silent = true })
 map("n", "<c-j>", "<c-w>j", { desc = "Window down" })
 map("n", "<c-k>", "<c-w>k", { desc = "Window up" })
 map("n", "<c-h>", "<c-w>h", { desc = "Window left" })
 map("n", "<c-l>", "<c-w>l", { desc = "Window right" })
+map("n", "<leader>fc", choose_colorscheme, { desc = "Colorschemes" })
 map("n", "<leader>gg", function()
     git_grep(vim.fn.expand("<cword>"))
 end, { desc = "Git grep word" })

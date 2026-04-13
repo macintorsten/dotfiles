@@ -12,6 +12,8 @@ if not ok_package or not package:is_installed() then
     return
 end
 
+local install_path = require("mason-core.installer.InstallLocation").global():package(package.name)
+
 local root_dir = require("lspconfig.util").root_pattern(
     ".git",
     "gradlew",
@@ -25,7 +27,6 @@ if not root_dir then
     return
 end
 
-local install_path = package:get_install_path()
 local launcher = vim.fn.glob(install_path .. "/plugins/org.eclipse.equinox.launcher_*.jar", true, true)[1]
 local config_dir = install_path .. "/config_linux"
 
