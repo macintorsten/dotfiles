@@ -1,4 +1,4 @@
-min_version = "2025.12.0"
+min_version = "2026.10.4"
 
 [settings]
 idiomatic_version_file_enable_tools = ["node"]
@@ -22,6 +22,7 @@ zoxide = "0.9.9"
 "github:tealdeer-rs/tealdeer"= { version = "1.8.1", asset_pattern = "tealdeer-linux-x86_64-musl", bin = "tldr" }
 usage = "3.2.0"
 node = "latest"
+neovim = "0.12.6"
 "npm:neovim" = "latest"
 "npm:tree-sitter-cli" = "latest"
 lua = "5.4.8"

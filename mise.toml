@@ -1,0 +1,55 @@
+# Bootstrap project: `mise bootstrap --from <url>` runs this file.
+# Global tools live in home/.config/mise/config.toml (deployed to ~/.config/mise).
+
+min_version = "2026.10.4"
+
+[settings]
+dotfiles.root = "."
+
+# home/ mirrors $HOME; every file in it is symlinked into place.
+[dotfile_groups.home]
+root = "home"
+
+[bootstrap.packages]
+# Build dependencies for lua, vim for EDITOR/.vimrc, imagemagick for `tv`.
+"apt:build-essential" = "latest"
+"apt:libreadline-dev" = "latest"
+"apt:vim" = "latest"
+"apt:imagemagick" = "latest"
+
+[bootstrap.repos]
+"~/.tmux/plugins/tpm" = { url = "https://github.com/tmux-plugins/tpm.git" }
+"~/.local/share/vim-plug" = { url = "https://github.com/junegunn/vim-plug.git" }
+
+[dotfiles]
+"~/.vim/autoload/plug.vim" = "~/.local/share/vim-plug/plug.vim"
+
+# mise lives in ~/.local/bin, which must be on PATH before mise is called.
+"~/.bash_profile/local-bin" = { line = 'export PATH="$HOME/.local/bin:$PATH"', position = "prepend" }
+"~/.bashrc/local-bin" = { line = 'export PATH="$HOME/.local/bin:$PATH"', position = "prepend" }
+"~/.bash_profile/bashrc" = { line = '[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"' }
+# An `activate` edit replaces mise's own block so activation runs before the
+# bashrc.d scripts that need the tools it provides.
+"~/.bashrc/activate" = { block = '''
+eval "$(mise activate bash)"
+for f in "$HOME/.config/bashrc.d"/*.sh; do [ -r "$f" ] && . "$f"; done
+unset f
+''' }
+
+# Login shells get shims; interactive shells get the activate block above.
+[bootstrap.mise_shell_activate]
+bash_profile = true
+bashrc = false
+
+[tasks.test]
+description = "Bootstrap a clean Ubuntu container from this checkout and verify it"
+run = '''
+args=(-t dotfiles-test)
+[ -n "${MISE_GITHUB_TOKEN:-}" ] && args+=(--secret id=MISE_GITHUB_TOKEN,env=MISE_GITHUB_TOKEN)
+docker buildx build --load "${args[@]}" "{{ config_root }}"
+'''
+
+[tasks."test:shell"]
+description = "Open a shell in the test container"
+depends = ["test"]
+run = 'docker run --rm -it -e MISE_GITHUB_TOKEN dotfiles-test bash -l'

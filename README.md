@@ -1,34 +1,41 @@
 # Dotfiles
 
-Configs managed with [GNU Stow](https://www.gnu.org/software/stow/). CLI tools managed with [mise](https://mise.jdx.dev/).
+Dotfiles and CLI tools managed by [mise](https://mise.jdx.dev/) (`mise bootstrap` + `mise dotfiles`). Requires mise 2026.10.4+.
 
 ## Setup
 
+Prerequisites: `git`, `curl`, and (for the `apt:` packages) `sudo` on Debian/Ubuntu.
+
 ```bash
-git clone https://github.com/macintorsten/dotfiles.git ~/.dotfiles
-bash ~/.dotfiles/bootstrap.sh
-cd ~/.dotfiles && stow */
-source ~/.bashrc
+curl -fsSL https://mise.run | sh
+~/.local/bin/mise bootstrap --from https://github.com/macintorsten/dotfiles.git
 ```
 
-`bootstrap.sh` is intentionally rootless: install `stow`, `git`, and `curl` yourself first if they are missing.
+Open a new shell afterwards. If GitHub rate-limits tool downloads, set `MISE_GITHUB_TOKEN` first.
+
+`--from` clones the repo to `~/.local/share/mise/bootstrap-repo` and runs [`mise.toml`](mise.toml): installs apt packages, clones tpm and vim-plug, symlinks `home/` into `~`, wires mise into bash, and installs the tools. Dotfiles are symlinks into that checkout, so edit them in place.
+
+## Daily use
+
+```bash
+mise bootstrap --from https://github.com/macintorsten/dotfiles.git --update   # pull and re-apply
+mise bootstrap --dry-run      # preview (run inside the checkout)
+mise bootstrap status         # tools, packages, shell
+mise dot status               # dotfiles
+mise dot add ~/.config/foo/bar   # move an existing file into home/ and link it back
+```
+
+## Layout
+
+- `home/` mirrors `$HOME`; every file in it is symlinked into place (one `dotfile_groups` entry).
+- `home/.config/mise/config.toml` holds the global tools; `mise bootstrap` installs them.
+- `mise.toml` declares apt packages, repos, shell integration, and the test tasks.
 
 ## Tools
 
-Global tools are defined in `mise/.config/mise/config.toml`. The config now prefers mise's built-in tool names and default backends where they are available, keeping a direct `http:` source only for `tldr` because it does not currently have a default registry entry in this setup. `bootstrap.sh` installs `mise` into `~/.local/bin`, installs the configured tools, and shell startup exposes both `mise` and its shims so globally installed tools also work in non-login shells.
-
-The current pinned release URLs target Linux x86_64, which matches the current WSL setup. If you want to use the repo on another platform later, extend the `mise` config with additional platform-specific URLs.
-
-```bash
-mise install          # install everything from config.toml
-mise exec -- jq --version
-```
-
-## Update tools
-
 ```bash
 mise outdated
-mise upgrade --bump   # bump pinned versions in config.toml
+mise upgrade --bump   # bump pinned versions in home/.config/mise/config.toml
 mise install
 ```
 
@@ -50,19 +57,21 @@ If you want a small LSP upgrade later without changing editors, `vim-lsp` plus `
 
 ## Neovim
 
-The Neovim config lives under `nvim/.config/nvim` and is intended to coexist with Vim rather than replace it.
+The Neovim config lives under `home/.config/nvim` and is intended to coexist with Vim rather than replace it.
 
 - The config targets Neovim 0.12+ for the smoothest experience, while keeping a few small compatibility shims for older releases where that does not require dropping features.
 - It keeps the core shortcuts familiar: `Ctrl+P` for git files, `Ctrl+F` for files, `Ctrl+B` for buffers, and `<Leader>gg` / `<Leader>gs` / `<Leader>gd` / `<Leader>gb` for git workflows.
 - Plugins are bootstrapped with `lazy.nvim`, navigation uses `fzf-lua`, git uses `vim-fugitive` plus `gitsigns`, and LSP/completion use `mason.nvim`, `nvim-lspconfig`, and `nvim-cmp`.
 - Use `:Colors` or `<Leader>fc` to preview installed colorschemes with live updates.
 - `mise install` also provides the Node host (`npm:neovim`) and `tree-sitter-cli` so Neovim health checks stay cleaner.
-- Install the `neovim` binary with your system package manager, then the first `nvim` launch will install plugins automatically.
+- `neovim` itself comes from mise; the first `nvim` launch installs plugins automatically.
 - Java support is wired through `nvim-jdtls`; install `jdtls` from `:Mason`, and the config ensures the Java treesitter parser so once a JDK is available, opening a Maven/Gradle/git-backed Java project should mostly just work.
 
 ## Test
 
+Bootstraps a clean Ubuntu container from this checkout and checks the result (needs Docker with buildx):
+
 ```bash
-./test.sh      # build Docker image
-./test.sh -i   # interactive shell
+mise run test         # build; fails if bootstrap or its status check fails
+mise run test:shell   # then open a login shell in the image
 ```
