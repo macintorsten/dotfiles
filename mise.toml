@@ -24,9 +24,9 @@ root = "home"
 [dotfiles]
 "~/.vim/autoload/plug.vim" = "~/.local/share/vim-plug/plug.vim"
 
-# mise lives in ~/.local/bin, which must be on PATH before mise is called.
+# mise lives in ~/.local/bin, which must be on PATH before the shims block calls it.
+# Interactive shells inherit PATH from the login shell.
 "~/.bash_profile/local-bin" = { line = 'export PATH="$HOME/.local/bin:$PATH"', position = "prepend" }
-"~/.bashrc/local-bin" = { line = 'export PATH="$HOME/.local/bin:$PATH"', position = "prepend" }
 # A ~/.bash_profile hides ~/.profile, so load that (Ubuntu's sources ~/.bashrc) or fall back to ~/.bashrc.
 "~/.bash_profile/profile" = { line = 'if [ -f "$HOME/.profile" ]; then . "$HOME/.profile"; elif [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi' }
 # An `activate` edit replaces mise's own block so activation runs before the
@@ -42,15 +42,27 @@ unset f
 bash_profile = true
 bashrc = false
 
-[tasks.test]
-description = "Bootstrap a clean Ubuntu container from this checkout and verify it"
-run = '''
-args=(-t dotfiles-test)
-[ -n "${MISE_GITHUB_TOKEN:-}" ] && args+=(--secret id=MISE_GITHUB_TOKEN,env=MISE_GITHUB_TOKEN)
-docker buildx build --load "${args[@]}" "{{ config_root }}"
-'''
+# Plugin installs need the tools from [tools], so run after they exist. Idempotent.
+[bootstrap.hooks.post-tools]
+run = [
+  "mise exec -- ~/.tmux/plugins/tpm/bin/install_plugins",
+  "mise exec -- nvim --headless '+Lazy! restore' +qa",
+]
 
-[tasks."test:shell"]
-description = "Open a shell in the test container"
-depends = ["test"]
-run = 'docker run --rm -it -e MISE_GITHUB_TOKEN dotfiles-test bash -l'
+[tasks.test]
+description = "Bootstrap this repo's committed HEAD in a clean Ubuntu container, twice, and verify"
+run = '''
+docker run --rm -it -e MISE_GITHUB_TOKEN -v "{{ config_root }}:/src:ro" ubuntu:latest bash -c '
+  set -e
+  apt-get update -qq && apt-get install -y -qq curl git ca-certificates >/dev/null
+  git config --global --add safe.directory "*"
+  curl -fsSL https://mise.run | sh
+  export PATH="$HOME/.local/bin:$PATH"
+  mise bootstrap --from /src --yes
+  mise bootstrap --from /src --yes
+  mise bootstrap status --missing
+  bash -lc "command -v rg"
+  bash -ic "command -v rg && echo EDITOR=\$EDITOR"
+  exec bash -l
+'
+'''

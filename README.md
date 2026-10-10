@@ -4,7 +4,7 @@ Dotfiles and CLI tools managed by [mise](https://mise.jdx.dev/) (`mise bootstrap
 
 ## Setup
 
-Prerequisites: `git`, `curl`, and (for the `apt:` packages) `sudo` on Debian/Ubuntu.
+Prerequisites: `git`, `curl`, and `sudo` (unless root) for the `apt:` packages on Debian/Ubuntu.
 
 ```bash
 curl -fsSL https://mise.run | sh
@@ -72,9 +72,18 @@ The Neovim config lives under `home/.config/nvim` and is intended to coexist wit
 
 ## Test
 
-Bootstraps a clean Ubuntu container from this checkout and checks the result (needs Docker with buildx):
+Needs Docker. Commit first: the test bootstraps `HEAD` from a clean Ubuntu container, twice, checks `mise bootstrap status --missing`, then drops you into a login shell.
 
 ```bash
-mise run test         # build; fails if bootstrap or its status check fails
-mise run test:shell   # then open a login shell in the image
+mise run test
+```
+
+Without mise, the same thing by hand:
+
+```bash
+docker run --rm -it -v "$PWD:/src:ro" ubuntu:latest bash -c '
+  apt-get update -qq && apt-get install -y -qq curl git ca-certificates &&
+  git config --global --add safe.directory "*" &&
+  curl -fsSL https://mise.run | sh && export PATH="$HOME/.local/bin:$PATH" &&
+  mise bootstrap --from /src --yes && exec bash -l'
 ```
