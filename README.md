@@ -47,7 +47,7 @@ mise lock --global --platform linux-x64,linux-arm64,macos-arm64
 
 ## Test
 
-Needs Docker. Commit first: the test bootstraps `HEAD` in a clean Ubuntu container, twice, and verifies the result. Downloads are cached in the Docker volume `dotfiles-test-mise-cache`.
+Needs Docker. Runs the setup above in a clean Ubuntu container from what is pushed to GitHub, then drops you into a shell. Downloads are cached in the `dotfiles-test-cache` volume.
 
 ```bash
 mise run test

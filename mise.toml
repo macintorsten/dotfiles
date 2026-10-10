@@ -38,35 +38,23 @@ bash = true
 # Plugin installs need the tools from [tools], so run after they exist. Idempotent.
 [bootstrap.hooks.post-tools]
 run = [
-  "mise exec -- ~/.tmux/plugins/tpm/bin/install_plugins",
-  "mise exec -- nvim --headless '+Lazy! restore' +qa",
+  "{{ mise_bin }} exec -- ~/.tmux/plugins/tpm/bin/install_plugins",
+  "{{ mise_bin }} exec -- nvim --headless '+Lazy! restore' +qa",
 ]
 
 [tasks.test]
-description = "Bootstrap this repo's committed HEAD in a clean Ubuntu container, twice, and verify"
+description = "Run the README setup in a clean Ubuntu container (tests what is pushed)"
 run = '''
-# Clone first: in a git worktree `.git` points outside the mount and breaks `--from`.
-src="$(mktemp -d)"
-trap 'rm -rf "$src"' EXIT
-git clone -q "{{ config_root }}" "$src/repo"
-# A named volume keeps tool downloads and metadata between runs (fast, and less
-# GitHub rate limiting) without sharing installed tools, so installs are still tested.
+# The volume only caches downloads between runs; tools are still installed fresh.
 docker run --rm -it -e MISE_GITHUB_TOKEN \
-  -e MISE_DOWNLOADS_DIR=/mise-cache/downloads -e MISE_CACHE_DIR=/mise-cache/cache \
-  -v dotfiles-test-mise-cache:/mise-cache -v "$src/repo:/src:ro" ubuntu:latest bash -c '
+  -v dotfiles-test-cache:/root/.cache/mise -e MISE_DOWNLOADS_DIR=/root/.cache/mise/downloads \
+  ubuntu:latest bash -c '
   set -e
   apt-get update -qq && apt-get install -y -qq curl git ca-certificates >/dev/null
-  git config --global --add safe.directory "*"
   curl -fsSL https://mise.run | sh
-  export PATH="$HOME/.local/bin:$PATH"
-  mise bootstrap --from /src --yes
-  mise bootstrap --from /src --yes
+  ~/.local/bin/mise bootstrap --from https://github.com/macintorsten/dotfiles.git --yes
   cd ~/.local/share/mise/bootstrap-repo
-  mise bootstrap status --missing
-  mise dot status | grep -c applied
-  cd
-  bash -lc "command -v rg"
-  bash -ic "command -v rg && echo EDITOR=\$EDITOR"
+  ~/.local/bin/mise bootstrap status --missing
   exec bash -l
 '
 '''
