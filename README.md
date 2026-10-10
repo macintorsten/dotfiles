@@ -13,15 +13,12 @@ curl -fsSL https://mise.run | sh
 
 Open a new shell afterwards. If GitHub rate-limits tool downloads, set `MISE_GITHUB_TOKEN` first.
 
-`--from` clones the repo to `~/.local/share/mise/bootstrap-repo` and runs [`mise.toml`](mise.toml): installs apt packages, clones tpm and vim-plug, symlinks `home/` into `~`, wires mise into bash, and installs the tools. Dotfiles are symlinks into that checkout, so edit them in place.
+`--from` clones the repo to `~/.local/share/mise/bootstrap-repo` and runs [`mise.toml`](mise.toml) in one go: installs apt packages, clones tpm and vim-plug, symlinks `home/` into `~`, wires mise into bash, installs all tools, and installs tmux/nvim plugins. Dotfiles are symlinks into that checkout, so edit them in place.
 
 ## Daily use
 
 ```bash
 mise bootstrap --from https://github.com/macintorsten/dotfiles.git --update   # pull and re-apply
-
-# these need the project config, so run them in the checkout
-cd ~/.local/share/mise/bootstrap-repo
 mise bootstrap --dry-run      # preview
 mise bootstrap status         # tools, packages, shell
 mise dot status               # dotfiles
@@ -31,14 +28,13 @@ mise dot add --group home ~/.config/foo/bar   # move an existing file into home/
 ## Layout
 
 - `home/` mirrors `$HOME`; every file in it is symlinked into place (one `dotfile_groups` entry).
-- `home/.config/mise/config.toml` holds the global tools; `mise bootstrap` installs them.
-- `mise.toml` declares apt packages, repos, shell integration, and the test tasks.
+- `mise.toml` is the single source of truth: tools, apt packages, repos, shell integration, hooks, and the test task. It is also symlinked to `~/.config/mise/config.toml`, so it stays the global config.
 
 ## Tools
 
 ```bash
 mise outdated
-mise upgrade --bump   # bump pinned versions in home/.config/mise/config.toml
+mise upgrade --bump   # bump pinned versions in mise.toml
 mise install
 ```
 
