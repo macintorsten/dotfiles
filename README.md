@@ -19,10 +19,13 @@ Open a new shell afterwards. If GitHub rate-limits tool downloads, set `MISE_GIT
 
 ```bash
 mise bootstrap --from https://github.com/macintorsten/dotfiles.git --update   # pull and re-apply
-mise bootstrap --dry-run      # preview (run inside the checkout)
+
+# these need the project config, so run them in the checkout
+cd ~/.local/share/mise/bootstrap-repo
+mise bootstrap --dry-run      # preview
 mise bootstrap status         # tools, packages, shell
 mise dot status               # dotfiles
-mise dot add ~/.config/foo/bar   # move an existing file into home/ and link it back
+mise dot add --group home ~/.config/foo/bar   # move an existing file into home/ and link it back
 ```
 
 ## Layout

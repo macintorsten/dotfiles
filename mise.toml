@@ -27,7 +27,8 @@ root = "home"
 # mise lives in ~/.local/bin, which must be on PATH before mise is called.
 "~/.bash_profile/local-bin" = { line = 'export PATH="$HOME/.local/bin:$PATH"', position = "prepend" }
 "~/.bashrc/local-bin" = { line = 'export PATH="$HOME/.local/bin:$PATH"', position = "prepend" }
-"~/.bash_profile/bashrc" = { line = '[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"' }
+# A ~/.bash_profile hides ~/.profile, so load that (Ubuntu's sources ~/.bashrc) or fall back to ~/.bashrc.
+"~/.bash_profile/profile" = { line = 'if [ -f "$HOME/.profile" ]; then . "$HOME/.profile"; elif [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi' }
 # An `activate` edit replaces mise's own block so activation runs before the
 # bashrc.d scripts that need the tools it provides.
 "~/.bashrc/activate" = { block = '''
