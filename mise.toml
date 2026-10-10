@@ -45,7 +45,15 @@ run = [
 [tasks.test]
 description = "Bootstrap this repo's committed HEAD in a clean Ubuntu container, twice, and verify"
 run = '''
-docker run --rm -it -e MISE_GITHUB_TOKEN -v "{{ config_root }}:/src:ro" ubuntu:latest bash -c '
+# Clone first: in a git worktree `.git` points outside the mount and breaks `--from`.
+src="$(mktemp -d)"
+trap 'rm -rf "$src"' EXIT
+git clone -q "{{ config_root }}" "$src/repo"
+# A named volume keeps tool downloads and metadata between runs (fast, and less
+# GitHub rate limiting) without sharing installed tools, so installs are still tested.
+docker run --rm -it -e MISE_GITHUB_TOKEN \
+  -e MISE_DOWNLOADS_DIR=/mise-cache/downloads -e MISE_CACHE_DIR=/mise-cache/cache \
+  -v dotfiles-test-mise-cache:/mise-cache -v "$src/repo:/src:ro" ubuntu:latest bash -c '
   set -e
   apt-get update -qq && apt-get install -y -qq curl git ca-certificates >/dev/null
   git config --global --add safe.directory "*"

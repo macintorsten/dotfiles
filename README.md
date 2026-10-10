@@ -42,6 +42,12 @@ mise upgrade --bump   # bump pinned versions in home/.config/mise/config.toml
 mise install
 ```
 
+Versions and checksums are locked in `home/.config/mise/mise.lock` (tools: `lockfile = true`). After editing tools, refresh it for all platforms and commit it:
+
+```bash
+mise lock --global --platform linux-x64,linux-arm64,macos-arm64
+```
+
 ## Node projects
 
 `fnm` has been replaced with `mise`. The config enables Node idiomatic version files, so `.nvmrc`-based projects can still work once you install a Node version with `mise use -g node@lts`.
@@ -72,7 +78,7 @@ The Neovim config lives under `home/.config/nvim` and is intended to coexist wit
 
 ## Test
 
-Needs Docker. Commit first: the test bootstraps `HEAD` from a clean Ubuntu container, twice, checks `mise bootstrap status --missing`, then drops you into a login shell.
+Needs Docker. Commit first: the test bootstraps `HEAD` from a clean Ubuntu container, twice, checks `mise bootstrap status --missing`, then drops you into a login shell. Tool downloads are cached in the Docker volume `dotfiles-test-mise-cache` (`docker volume rm dotfiles-test-mise-cache` for a fully cold run).
 
 ```bash
 mise run test
@@ -81,7 +87,7 @@ mise run test
 Without mise, the same thing by hand:
 
 ```bash
-docker run --rm -it -v "$PWD:/src:ro" ubuntu:latest bash -c '
+git clone -q . /tmp/dotfiles-test && docker run --rm -it -v /tmp/dotfiles-test:/src:ro ubuntu:latest bash -c '
   apt-get update -qq && apt-get install -y -qq curl git ca-certificates &&
   git config --global --add safe.directory "*" &&
   curl -fsSL https://mise.run | sh && export PATH="$HOME/.local/bin:$PATH" &&
