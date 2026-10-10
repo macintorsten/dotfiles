@@ -55,18 +55,11 @@ lua = "5.4.8"
 "~/.bash_profile/local-bin" = { line = 'export PATH="$HOME/.local/bin:$PATH"', position = "prepend" }
 # A ~/.bash_profile hides ~/.profile, so load that (Ubuntu's sources ~/.bashrc) or fall back to ~/.bashrc.
 "~/.bash_profile/profile" = { line = 'if [ -f "$HOME/.profile" ]; then . "$HOME/.profile"; elif [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi' }
-# An `activate` edit replaces mise's own block so activation runs before the
-# bashrc.d scripts that need the tools it provides.
-"~/.bashrc/activate" = { block = '''
-eval "$(mise activate bash)"
-for f in "$HOME/.config/bashrc.d"/*.sh; do [ -r "$f" ] && . "$f"; done
-unset f
-''' }
+"~/.bashrc/bashrc-d" = { line = 'for f in "$HOME/.config/bashrc.d"/*.sh; do [ -r "$f" ] && . "$f"; done; unset f' }
 
-# Login shells get shims; interactive shells get the activate block above.
+# Shims in ~/.bash_profile, full activation in ~/.bashrc.
 [bootstrap.mise_shell_activate]
-bash_profile = true
-bashrc = false
+bash = true
 
 # Plugin installs need the tools from [tools], so run after they exist. Idempotent.
 [bootstrap.hooks.post-tools]
