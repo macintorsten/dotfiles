@@ -1,42 +1,40 @@
 # AI Agent Guide
 
+Everything is managed by mise (2026.10.4+): no Stow, no bootstrap script.
+
 ## Structure
 
-Each tool has its own directory at repo root — a stow package. `stow */` from `~/.dotfiles` deploys all configs to `~` by default.
-
-Shell integrations live in `bash/.config/bashrc.d/##-<tool>.sh`. CLI tools are managed via `mise/.config/mise/config.toml`, while `bootstrap.sh` installs rootless prerequisites like `mise` itself.
+- `mise.toml` — machine setup (project config, used from the checkout): dotfile group, apt packages, git repos, bash integration, post-tools hooks, test task.
+- `home/` — mirrors `$HOME`; every file is symlinked into place by the `home` dotfile group.
+- `home/.config/mise/config.toml` — global tools (deployed to `~/.config/mise/config.toml`).
+- `home/.config/bashrc.d/##-<tool>.sh` — shell integrations, sourced from the `~/.bashrc` activate block in `mise.toml` after mise activation.
 
 ## Workflow
 
 ```bash
-bash ~/.dotfiles/bootstrap.sh   # install tools (idempotent)
-cd ~/.dotfiles && stow */        # deploy configs
-source ~/.bashrc
+mise bootstrap --from https://github.com/macintorsten/dotfiles.git   # first run / re-apply
+mise bootstrap status --missing && mise dot status                   # verify (inside the checkout)
 ```
 
 ## Adding a tool
 
-1. Create `<tool>/` with stow-compatible structure (`<tool>/.config/...` or `<tool>/.<tool>rc`)
-2. If shell integration needed: add `bash/.config/bashrc.d/##-<tool>.sh`
-3. If managed by mise: add to `mise/.config/mise/config.toml`
-4. If the tool still needs custom bootstrap logic: add it to `bootstrap.sh` without requiring root
+1. Global CLI tool: add it to `home/.config/mise/config.toml`.
+2. Its config: add files under `home/` at their `$HOME` path (no `mise.toml` change needed).
+3. Shell integration: add `home/.config/bashrc.d/##-<tool>.sh`.
+4. System package or git checkout: add to `[bootstrap.packages]` / `[bootstrap.repos]` in `mise.toml`.
 
 ## Removing a tool
 
-1. Delete `<tool>/`
-2. Delete `bash/.config/bashrc.d/##-<tool>.sh` (if exists)
-3. Remove from `config.toml` or `bootstrap.sh`
+Delete its files from `home/`, then `mise dot apply --prune`. Remove its entries from the config files above.
 
 ## bashrc.d numbering
 
-- `00-` PATH/environment
-- `05-` tool managers
+- `01-` environment
 - `50-` prompt/init
 - `60-70` tool integrations
 
 ## Testing
 
 ```bash
-./test.sh      # build Docker image
-./test.sh -i   # interactive shell
+mise run test   # commit first; bootstraps HEAD twice in a clean Ubuntu container
 ```
