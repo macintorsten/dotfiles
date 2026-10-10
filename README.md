@@ -23,7 +23,7 @@ To replace existing files that conflict with a dotfile, add `--force-dotfiles`:
 
 ## Layout
 
-- [`mise.toml`](mise.toml): machine setup (project config, used from the checkout): apt packages, git repos, shell integration, hooks, and the test task.
+- [`mise.toml`](mise.toml): machine setup (project config, used from the checkout): apt packages, git repos, shell integration, and hooks. Tasks live in [`mise-tasks/`](mise-tasks).
 - [`home/`](home): mirrors `$HOME`; every file is symlinked into place.
 - [`home/.config/mise/config.toml`](home/.config/mise/config.toml): the global tools, locked in [`mise.lock`](home/.config/mise/mise.lock).
 
@@ -47,7 +47,7 @@ mise lock --global --platform linux-x64,linux-arm64,macos-arm64
 
 ## Test
 
-Needs Docker. Runs the setup above in a clean Ubuntu container from what is pushed to GitHub, then drops you into a shell. Downloads are cached in the `dotfiles-test-cache` volume.
+Needs Docker. The [`test`](mise-tasks/test) task bootstraps the committed `HEAD` of your local checkout in a clean Ubuntu container, then drops you into a shell. Downloads are cached in the `dotfiles-test-cache` volume.
 
 ```bash
 mise run test

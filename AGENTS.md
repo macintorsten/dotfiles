@@ -4,7 +4,7 @@ Everything is managed by mise (2026.10.4+): no Stow, no bootstrap script.
 
 ## Structure
 
-- `mise.toml` — machine setup (project config, used from the checkout): dotfile group, apt packages, git repos, bash integration, post-tools hooks, test task.
+- `mise.toml` — machine setup (project config, used from the checkout): dotfile group, apt packages, git repos, bash integration, post-tools hooks.
 - `home/` — mirrors `$HOME`; every file is symlinked into place by the `home` dotfile group.
 - `home/.config/mise/config.toml` — global tools (deployed to `~/.config/mise/config.toml`).
 - `home/.config/bashrc.d/##-<tool>.sh` — shell integrations, sourced from the `~/.bashrc` activate block in `mise.toml` after mise activation.
@@ -36,5 +36,5 @@ Delete its files from `home/`, then `mise dot apply --prune`. Remove its entries
 ## Testing
 
 ```bash
-mise run test   # commit first; bootstraps HEAD twice in a clean Ubuntu container
+mise run test   # commit first; bootstraps HEAD in a clean Ubuntu container
 ```
