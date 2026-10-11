@@ -1,40 +1,12 @@
 # AI Agent Guide
 
-Everything is managed by mise (2026.10.4+): no Stow, no bootstrap script.
+mise manages the shared tool, package, shell activation, and history-watcher
+setup. The starter global config is `home/.config/mise/config.toml`; merge it
+into `~/.config/mise/config.toml` on the first machine, then track the live
+config and other files with `mise dot track`.
 
-## Structure
+The `home/` tree is a migration snapshot from the former symlink setup. It is
+not installed or updated automatically. Ongoing file history and cross-machine
+sync belong to mise and a separate private Git origin.
 
-- `mise.toml` — machine setup (project config, used from the checkout): dotfile group, apt packages, git repos, bash integration, post-tools hooks.
-- `home/` — mirrors `$HOME`; every file is symlinked into place by the `home` dotfile group.
-- `home/.config/mise/config.toml` — global tools (deployed to `~/.config/mise/config.toml`).
-- `home/.config/bashrc.d/##-<tool>.sh` — shell integrations, sourced from the `~/.bashrc` activate block in `mise.toml` after mise activation.
-
-## Workflow
-
-```bash
-mise bootstrap --from https://github.com/macintorsten/dotfiles.git   # first run / re-apply
-mise bootstrap status --missing && mise dot status                   # verify (inside the checkout)
-```
-
-## Adding a tool
-
-1. Global CLI tool: add it to `home/.config/mise/config.toml`.
-2. Its config: add files under `home/` at their `$HOME` path (no `mise.toml` change needed).
-3. Shell integration: add `home/.config/bashrc.d/##-<tool>.sh`.
-4. System package or git checkout: add to `[bootstrap.packages]` / `[bootstrap.repos]` in `mise.toml`.
-
-## Removing a tool
-
-Delete its files from `home/`, then `mise dot apply --prune`. Remove its entries from the config files above.
-
-## bashrc.d numbering
-
-- `01-` environment
-- `50-` prompt/init
-- `60-70` tool integrations
-
-## Testing
-
-```bash
-mise run test   # commit first; bootstraps HEAD in a clean Ubuntu container
-```
+Keep documentation focused on the essential track, sync, and adopt workflow.
