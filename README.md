@@ -2,7 +2,9 @@
 
 This repository is a setup seed, not the dotfiles sync remote. mise tracks files
 where they live, keeps their history, and can sync that history to a separate
-private Git repository. The starter global config is
+private Git repository. `home/` preserves the previous setup as a migration
+reference; merge only the settings and files you need into your live home
+directory. The starter global config is
 [`home/.config/mise/config.toml`](home/.config/mise/config.toml).
 
 ## First machine
@@ -45,6 +47,7 @@ Edit a tracked file, then verify it was saved and synced:
 
 ```sh
 mise dot save ~/.bashrc
+mise dot sync
 mise dot status
 ```
 
