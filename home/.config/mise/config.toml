@@ -27,3 +27,26 @@ neovim = "0.12.6"
 "npm:neovim" = "latest"
 "npm:tree-sitter-cli" = "latest"
 lua = "5.4.8"
+
+[bootstrap.packages]
+"apt:build-essential" = "latest"
+"apt:libreadline-dev" = "latest"
+"apt:vim" = "latest"
+"apt:imagemagick" = "latest"
+
+[bootstrap.repos]
+"~/.tmux/plugins/tpm" = { url = "https://github.com/tmux-plugins/tpm.git" }
+"~/.local/share/vim-plug" = { url = "https://github.com/junegunn/vim-plug.git" }
+
+[bootstrap.services.mise-history]
+builtin = "history-watch"
+
+[bootstrap.mise_shell_activate]
+bash = true
+
+[bootstrap.hooks.post-tools]
+run = [
+  "{{ mise_bin }} exec -- ~/.tmux/plugins/tpm/bin/install_plugins",
+  "{{ mise_bin }} exec -- nvim --headless '+Lazy! restore' +qa",
+  "{{ mise_bin }} exec -- bash -c 'mkdir -p ~/.vim/autoload && ln -sfn ~/.local/share/vim-plug/plug.vim ~/.vim/autoload/plug.vim'",
+]
