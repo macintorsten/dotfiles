@@ -15,6 +15,10 @@ Open a new shell afterwards. If GitHub rate-limits tool downloads, set `MISE_GIT
 
 `--from` clones the repo to `~/.local/share/mise/bootstrap-repo` and applies [`mise.toml`](mise.toml). Dotfiles are symlinks into that checkout, so edit them in place.
 
+## Dotfiles approach
+
+The recommended [mise setup](https://mise.jdx.dev/dotfiles.html#recommended-setup) tracks files where they already live, saves their history with a watcher, and can sync through a private repository. This repo intentionally uses the other supported approach: configuration is maintained here and deployed as symlinks by `mise bootstrap`. That makes the checkout the source of truth, so the history watcher, `mise dot origin`, and `mise bootstrap --adopt` workflow are not part of this setup. See [Set up a machine](https://mise.jdx.dev/bootstrap/setup.html) for the tracking-and-sync workflow.
+
 To replace existing files that conflict with a dotfile, add `--force-dotfiles`:
 
 ```bash
